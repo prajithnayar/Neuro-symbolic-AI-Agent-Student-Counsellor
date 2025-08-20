@@ -1,0 +1,6 @@
+streamlit
+langchain
+neo4j
+openai
+google-generativeai
+langchain-google-genai
