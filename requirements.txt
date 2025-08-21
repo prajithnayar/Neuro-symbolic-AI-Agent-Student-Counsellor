@@ -1,6 +1,4 @@
 streamlit
-langchain
-neo4j
 openai
-google-generativeai
-langchain-google-genai
+neo4j
+python-dotenv
