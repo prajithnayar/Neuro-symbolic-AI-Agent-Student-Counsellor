@@ -1,94 +1,109 @@
-
+# streamlit_app.py
 import streamlit as st
+# RuleDatabase and LLMAgent classes are assumed to be defined in the environment
+# from rule_database import RuleDatabase
+# from llm_agent import LLMAgent
 import os
-from langchain.chains import GraphCypherQAChain
-from langchain_community.graphs import Neo4jGraph
-# Update the import for GoogleGenerativeAI
-from langchain_google_genai import GoogleGenerativeAI
-from langchain_community.llms import OpenAI
 
-# --- INSTRUCTIONS ---
-# 1. Install required libraries:
-#    pip install streamlit langchain neo4j openai google-generativeai langchain-google-genai
-# 2. Get your Neo4j credentials from Neo4j AuraDB.
-# 3. Add your OpenAI or Google Generative AI API key.
-# 4. Save this file as `streamlit_app.py` and run it from your terminal:
-#    streamlit run streamlit_app.py
-# --------------------
+st.title("CBSE High School Education Consultant")
+st.write("Get college and subject eligibility based on your academic profile and explore college options with AI.")
 
-def setup_chain():
-    """Initializes the Neo4j graph and the LangChain agent."""
+st.header("Enter Your Academic Information")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("CBSE Details")
+    student_aggregate_percentage = st.number_input("CBSE Aggregate Percentage (%)", min_value=0.0, max_value=100.0, value=75.0, step=0.1)
+    student_completed_cbse = st.checkbox("Completed CBSE 12th?", value=True)
+
+    st.subheader("Subject Grades (Percentage)")
+    student_grade_math = st.number_input("Math Percentage", min_value=0.0, max_value=100.0, value=75.0, step=0.1)
+    student_grade_physics = st.number_input("Physics Percentage", min_value=0.0, max_value=100.0, value=75.0, step=0.1)
+    student_grade_chemistry = st.number_input("Chemistry Percentage", min_value=0.0, max_value=100.0, value=75.0, step=0.1)
+
+
+with col2:
+    st.subheader("Additional Grades")
+    student_grade_biology = st.number_input("Biology Percentage", min_value=0.0, max_value=100.0, value=75.0, step=0.1)
+    student_grade_computer_science = st.number_input("Computer Science Percentage", min_value=0.0, max_value=100.0, value=75.0, step=0.1)
+
+
+    st.subheader("Standardized Tests")
+    student_taken_jee = st.checkbox("Taken JEE Main?", value=False)
+    student_jee_main_percentile = st.number_input("JEE Main Percentile", min_value=0.0, max_value=100.0, value=0.0, step=0.1, disabled=not student_taken_jee)
+
+    student_taken_neet = st.checkbox("Taken NEET?", value=False)
+    student_neet_score = st.number_input("NEET Score", min_value=0, value=0, step=1, disabled=not student_taken_neet) # Assuming score, not percentage
+
+    student_taken_sat_act = st.checkbox("Taken SAT/ACT?", value=False)
+    student_sat_score = st.number_input("SAT Score", min_value=400, max_value=1600, value=400, step=10, disabled=not student_taken_sat_act)
+    student_act_score = st.number_input("ACT Score", min_value=1, max_value=36, value=1, step=1, disabled=not student_taken_sat_act) # Added ACT input
+
+
+st.header("Ask the AI Consultant")
+student_query = st.text_area("Enter your questions about colleges, subjects, or admissions:", "Suggest some good engineering colleges in India based on my profile.")
+
+if st.button("Get Consultation"):
+    # Collect student facts
+    student_facts = {
+        "student_aggregate_percentage": student_aggregate_percentage,
+        "student_completed_cbse": student_completed_cbse,
+        "student_grade_math": student_grade_math,
+        "student_grade_physics": student_grade_physics,
+        "student_grade_chemistry": student_grade_chemistry,
+        "student_grade_biology": student_grade_biology,
+        "student_grade_computer_science": student_grade_computer_science,
+        "student_taken_jee": student_taken_jee,
+        "student_jee_main_percentile": student_jee_main_percentile,
+        "student_taken_neet": student_taken_neet,
+        "student_neet_score": student_neet_score,
+        "student_taken_sat_act": student_taken_sat_act,
+        "student_sat_score": student_sat_score,
+        "student_act_score": student_act_score,
+    }
+
+    st.subheader("Consultation Results")
     try:
-        # Use Streamlit secrets for credentials in a deployed app, or environment variables
-        neo4j_url = st.secrets["NEO4J_URL"] if "NEO4J_URL" in st.secrets else os.getenv("NEO4J_URL", "bolt://localhost:7687")
-        neo4j_username = st.secrets["NEO4J_USERNAME"] if "NEO4J_USERNAME" in st.secrets else os.getenv("NEO4J_USERNAME", "neo4j")
-        neo4j_password = st.secrets["NEO4J_PASSWORD"] if "NEO4J_PASSWORD" in st.secrets else os.getenv("NEO4J_PASSWORD", "your_password_here")
+        # Initialize RuleDatabase and query eligibility
+        # Replace with your Neo4j Aura connection details and secure secrets handling
+        # In Streamlit Cloud, use st.secrets
+        neo4j_uri = st.secrets["NEO4J_URI"]
+        neo4j_user = st.secrets["NEO4J_USER"]
+        neo4j_password = st.secrets["NEO4J_PASSWORD"]
 
-        # For Google Generative AI, set your API key in Streamlit secrets or as an environment variable
-        # st.secrets["GOOGLE_API_KEY"] or os.getenv("GOOGLE_API_KEY")
-        llm = GoogleGenerativeAI(model="gemini-pro", temperature=0)
+        db = RuleDatabase(neo4j_uri, neo4j_user, neo4j_password)
+        # Assuming rules are already populated in the database
+        # If not, you would call db.populate_rules(eligibility_rules) here,
+        # but this might be better done as a separate setup step or on app startup.
 
-        graph = Neo4jGraph(url=neo4j_url, username=neo4j_username, password=neo4j_password)
-        graph.refresh_schema()
+        eligibility_results = db.query_eligibility(student_facts)
+        db.close()
 
-        # Create the GraphCypherQAChain with a custom prompt
-        chain = GraphCypherQAChain.from_llm(
-            llm=llm,
-            graph=graph,
-            verbose=False,
-            cypher_prompt_template="""
-            You are an expert in academic eligibility and a top-notch Neo4j developer.
-            Your task is to convert user questions about student eligibility into optimized Cypher queries.
-            You have access to the following node labels and relationships:
-            - Node Labels: Student, Stream, Degree, Requirement, College, Country
-            - Relationships: HAS_STREAM, ELIGIBLE_FOR, REQUIRES, OFFERS, LOCATED_IN
+        st.write("### Eligibility Based on Rules:")
+        if eligibility_results:
+            for result in eligibility_results:
+                st.write(f"- **{result['conclusion']}** (Rule: {result['rule_id']}: {result['description']})")
+        else:
+            st.write("No specific eligibility conclusions found based on the provided rules and your profile.")
 
-            Generate a single Cypher query for the user's question, without any other text.
-            Question: {question}
-            """,
-        )
-        return chain
     except Exception as e:
-        st.error(f"Failed to connect to the knowledge graph. Please ensure your Neo4j database is running and credentials are correct. Error: {e}")
-        return None
+        st.error(f"Error querying eligibility rules: {e}")
+        eligibility_results = None # Ensure eligibility_results is defined even on error
 
-# --- STREAMLIT UI ---
-st.set_page_config(page_title="Academic Advisor Bot")
-st.title("🎓 Academic Advisor Bot")
-st.markdown("Ask me questions about college and degree eligibility based on academic streams and location.")
 
-# Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-    st.session_state.chain = setup_chain()
-    st.session_state.messages.append({"role": "assistant", "content": "Hello! I can help you find your academic path. How can I assist you today?"})
+    try:
+        # Initialize LLMAgent and get college info
+        # Replace with your OpenAI API key and secure secrets handling
+        # In Streamlit Cloud, use st.secrets
+        openai_api_key = st.secrets["OPENAI_API_KEY"]
+        llm_agent = LLMAgent(openai_api_key)
 
-# Display chat messages from history on app rerun
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        with st.spinner("Getting AI insights..."):
+            llm_response = llm_agent.get_college_info(student_query, eligibility_results)
 
-# React to user input
-if prompt := st.chat_input("What would you like to know?"):
-    # Display user message in chat message container
-    st.chat_message("user").markdown(prompt)
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
+        st.write("### AI Consultant Response:")
+        st.write(llm_response)
 
-    # Get the response from the LLM chain
-    if st.session_state.chain:
-        with st.spinner('Thinking...'):
-            try:
-                response = st.session_state.chain.run(prompt)
-                st.session_message = {"role": "assistant", "content": response}
-                st.chat_message("assistant").markdown(response)
-                st.session_state.messages.append(st.session_message)
-            except Exception as e:
-                error_message = f"I'm sorry, I couldn't process that query. An error occurred: {e}"
-                st.error(error_message)
-                st.session_message = {"role": "assistant", "content": error_message}
-                st.session_state.messages.append(st.session_message)
-    else:
-        st.session_message = {"role": "assistant", "content": "The application could not connect to the database. Please check the setup and try again."}
-        st.chat_message("assistant").markdown(st.session_message["content"])
-        st.session_state.messages.append(st.session_message)
+    except Exception as e:
+        st.error(f"Error getting AI consultation: {e}")
